@@ -54,9 +54,17 @@ function directionEnabled(mode, dir) {
 	return false;
 }
 
+function isNullorUndef(input){
+	if (typeof(input)=='undefined')
+		return true;
+	if (input===null)
+		return true;
+	return false;
+}
+
 function rangeMaxLimiter(zoomPanOptions, newMax) {
 	if (zoomPanOptions.scaleAxes && zoomPanOptions.rangeMax &&
-			!helpers.isNullOrUndef(zoomPanOptions.rangeMax[zoomPanOptions.scaleAxes])) {
+			!isNullorUndef(zoomPanOptions.rangeMax[zoomPanOptions.scaleAxes])) {
 		var rangeMax = zoomPanOptions.rangeMax[zoomPanOptions.scaleAxes];
 		if (newMax > rangeMax) {
 			newMax = rangeMax;
@@ -67,7 +75,7 @@ function rangeMaxLimiter(zoomPanOptions, newMax) {
 
 function rangeMinLimiter(zoomPanOptions, newMin) {
 	if (zoomPanOptions.scaleAxes && zoomPanOptions.rangeMin &&
-			!helpers.isNullOrUndef(zoomPanOptions.rangeMin[zoomPanOptions.scaleAxes])) {
+			!isNullorUndef(zoomPanOptions.rangeMin[zoomPanOptions.scaleAxes])) {
 		var rangeMin = zoomPanOptions.rangeMin[zoomPanOptions.scaleAxes];
 		if (newMin < rangeMin) {
 			newMin = rangeMin;
@@ -207,9 +215,61 @@ function doZoom(chartInstance, zoom, center, whichAxes) {
 				zoomScale(scale, zoom, center, zoomOptions);
 			}
 		});
+		
+		let minAndMaxYVal = findMinAndMaxYValValDisplayed(chartInstance);
+		let padding=(minAndMaxYVal[1]-minAndMaxYVal[0])*.2;
 
+		chartInstance.config.options.scales.yAxes[0].ticks.min=(minAndMaxYVal[0]>=0&&minAndMaxYVal[0]<padding)?0:(minAndMaxYVal[0]-padding);
+		chartInstance.config.options.scales.yAxes[0].ticks.max=minAndMaxYVal[1]+padding;
+
+		let minAndMaxXVal = findMinAndMaxXValDisplayed(chartInstance);
+		chartInstance.config.options.scales.xAxes[0].ticks.min = minAndMaxXVal[0];
+		chartInstance.config.options.scales.xAxes[0].ticks.max = minAndMaxXVal[1];
 		chartInstance.update(0);
 	}
+}
+
+function findMinAndMaxXValDisplayed(chartInstance){
+	let minVal=Number.MAX_SAFE_INTEGER;
+	let maxVal=Number.MIN_SAFE_INTEGER;
+	for (let i=0; i< chartInstance.config.data.datasets.length; i++){
+		if (chartInstance.config.data.datasets[i].data.length==0)
+			continue;
+		if (minVal>Math.min( chartInstance.config.data.datasets[i].data[chartInstance.config.data.datasets[i].data.length-1].x, chartInstance.config.data.datasets[i].data[0].x))
+			minVal=Math.min( chartInstance.config.data.datasets[i].data[chartInstance.config.data.datasets[i].data.length-1].x, chartInstance.config.data.datasets[i].data[0].x);
+		if (maxVal<Math.max( chartInstance.config.data.datasets[i].data[chartInstance.config.data.datasets[i].data.length-1].x, chartInstance.config.data.datasets[i].data[0].x))
+			maxVal=Math.max( chartInstance.config.data.datasets[i].data[chartInstance.config.data.datasets[i].data.length-1].x, chartInstance.config.data.datasets[i].data[0].x);
+	}
+
+	return [Math.max( minVal-10, chartInstance.config.options.scales.xAxes[0].ticks.min), Math.min(maxVal+10, chartInstance.config.options.scales.xAxes[0].ticks.max)];
+
+}
+
+function findMinAndMaxYValValDisplayed(chartInstance){
+	let startValue = chartInstance.scales["x-axis-0"].start;
+	let endValue = chartInstance.scales["x-axis-0"].end;
+
+	let maxVal = Number.MIN_SAFE_INTEGER;
+	let minVal = Number.MAX_SAFE_INTEGER;
+
+
+	for (let i=0; i<chartInstance.config.data.datasets.length;i++){
+		let currentDataset = chartInstance.config.data.datasets[i].data;
+		let currentIndex = 0;		
+		while(currentIndex<currentDataset.length&&currentDataset[currentIndex].x<startValue){
+			currentIndex++;
+		}
+		while(currentIndex<currentDataset.length&&currentDataset[currentIndex].x<endValue){
+			if(currentDataset[currentIndex].y>maxVal){
+				maxVal=currentDataset[currentIndex].y;
+			}
+			if(currentDataset[currentIndex].y<minVal){
+				minVal=currentDataset[currentIndex].y;
+			}
+			currentIndex++;
+		}
+	}
+	return [minVal,maxVal];
 }
 
 function panIndexScale(scale, delta, panOptions) {
@@ -282,6 +342,15 @@ function doPan(chartInstance, deltaX, deltaY) {
 			}
 		});
 
+
+		let minAndMaxYVal = findMinAndMaxYValValDisplayed(chartInstance);
+		let padding=(minAndMaxYVal[1]-minAndMaxYVal[0])*.2
+		chartInstance.config.options.scales.yAxes[0].ticks.min=(minAndMaxYVal[0]>=0&&minAndMaxYVal[0]<padding)?0:(minAndMaxYVal[0]-padding);
+		chartInstance.config.options.scales.yAxes[0].ticks.max=minAndMaxYVal[1]+padding;
+		let minAndMaxXVal = findMinAndMaxXValDisplayed(chartInstance);
+		chartInstance.config.options.scales.xAxes[0].ticks.min = minAndMaxXVal[0];
+		chartInstance.config.options.scales.xAxes[0].ticks.max = minAndMaxXVal[1];
+
 		chartInstance.update(0);
 	}
 }
@@ -348,6 +417,15 @@ var zoomPlugin = {
 			chartInstance.update();
 		};
 
+		chartInstance.zoomIn = function(id){
+			let rect = document.getElementById("chart"+id).getBoundingClientRect();
+			var center = {
+				x: (rect.right-rect.left)/2,
+				y: (rect.top-rect.bottom)/2
+			}
+			doZoom(chartInstance, 1.1, center);
+		}
+
 	},
 	beforeInit: function(chartInstance) {
 		chartInstance.zoom = {};
@@ -407,7 +485,10 @@ var zoomPlugin = {
 				var rect = event.target.getBoundingClientRect();
 				var offsetX = event.clientX - rect.left;
 				var offsetY = event.clientY - rect.top;
+				console.log(event);
+				console.log(rect);
 
+				
 				var center = {
 					x : offsetX,
 					y : offsetY
